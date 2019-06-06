@@ -12,15 +12,104 @@ import android.support.v7.app.AppCompatActivity
 import android.support.v7.widget.Toolbar
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.ListView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ChildEventListener
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
+import android.util.Base64
 
 import kotlinx.android.synthetic.main.activity_main.*
+import java.util.*
 
 class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
     private lateinit var mToolbar: Toolbar
     private var mGenre = 0
+
+    private lateinit var mDatabaseReadable: DatabaseReference
+    private lateinit var mListView: ListView
+    private lateinit var mQuestionArrayList: ArrayList<Question>
+    private lateinit var mAdapter: QuestionsListAdapter
+
+    private var mGenreRef: DatabaseReference? = null
+
+    private val mEventListener = object : ChildEventListener {
+        override fun onChildAdded(dataSnapshot: DataSnapshot, s: String?) {
+            val map = dataSnapshot.value as Map<String, String>
+            val title = map["title"] ?: ""
+            val body = map["body"] ?: ""
+            val name = map["name"] ?: ""
+            val uid = map["uid"] ?: ""
+            val imageString = map["image"] ?: ""
+            val bytes =
+                    if (imageString.isNotEmpty()) {
+                        Base64.decode(imageString, Base64.DEFAULT)
+                    } else {
+                        byteArrayOf()
+                    }
+
+            val answerArrayList = ArrayList<Answer>()
+            val answerMap = map["answers"] as Map<String, String>?
+            if (answerMap != null) {
+                for (key in answerMap.keys) {
+                    val temp = answerMap[key] as Map<String, String>
+                    val answerBody = temp["body"] ?: ""
+                    val answerName = temp["name"] ?: ""
+                    val answerUid = temp["uid"] ?: ""
+                    val answer = Answer(answerBody, answerName, answerUid, key)
+                    answerArrayList.add(answer)
+                }
+            }
+
+            val question = Question(title, body, name, uid, dataSnapshot.key ?: "",
+                mGenre, bytes, answerArrayList)
+            mQuestionArrayList.add(question)
+            mAdapter.notifyDataSetChanged()
+        }
+
+        override fun onChildChanged(dataSnapshot: DataSnapshot, s: String?) {
+            val map = dataSnapshot.value as Map<String, String>
+
+            for (question in mQuestionArrayList) {
+                if (dataSnapshot.key.equals(question.questionUid)) {
+                    question.answers.clear()
+                    val answerMap = map["answers"] as Map<String, String>?
+                    if (answerMap != null) {
+                        for (key in answerMap.keys) {
+                            val temp = answerMap[key] as Map<String, String>
+                            val answerBody = temp["body"] ?: ""
+                            val answerName = temp["name"] ?: ""
+                            val answerUid = temp["uid"] ?: ""
+                            val answer = Answer(answerBody, answerName, answerUid, key)
+                            question.answers.add(answer)
+                        }
+                    }
+
+                    mAdapter.notifyDataSetChanged()
+                }
+            }
+        }
+
+        override fun onChildRemoved(p0: DataSnapshot) {
+
+        }
+
+        override fun onChildMoved(p0: DataSnapshot, p1: String?) {
+
+        }
+
+        override fun onCancelled(p0: DatabaseError) {
+
+        }
+    }
+
+
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,11 +119,21 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         setSupportActionBar(mToolbar)
 
         val fab = findViewById<FloatingActionButton>(R.id.fab)
-        fab.setOnClickListener {_ ->
+        fab.setOnClickListener { view ->
+            if (mGenre == 0) {
+                Snackbar.make(view, "ジャンルを選択して下さい", Snackbar.LENGTH_LONG).show()
+            } else {
+
+            }
+
             val user = FirebaseAuth.getInstance().currentUser
 
             if (user == null) {
                 val intent = Intent(applicationContext, LoginActivity::class.java)
+                startActivity(intent)
+            } else {
+                val intent = Intent(applicationContext, QuestionSendActivity::class.java)
+                intent.putExtra("genre", mGenre)
                 startActivity(intent)
             }
         }
@@ -46,6 +145,15 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
         val navigationView = findViewById<NavigationView>(R.id.nav_view)
         navigationView.setNavigationItemSelectedListener(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val navigationView = findViewById<NavigationView>(R.id.nav_view)
+
+        if (mGenre == 0) {
+            onNavigationItemSelected(navigationView.menu.getItem(0))
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
