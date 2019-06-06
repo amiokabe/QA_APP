@@ -74,6 +74,7 @@ class LoginActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
 
                 finish()
+
             } else {
                 val view = findViewById<View>(android.R.id.content)
                 Snackbar.make(view, "ログインに失敗しました", Snackbar.LENGTH_LONG).show()
